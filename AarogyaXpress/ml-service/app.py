@@ -196,15 +196,25 @@ def _extract_prescription_lines(text: str) -> list[dict]:
 def prescription_ocr():
     try:
         image, filename = _read_upload()
+        # Follow the upstream OCR project's multilingual Tesseract approach,
+        # but use only language packs installed by the service operator.
+        installed_languages = set(pytesseract.get_languages(config=""))
+        requested_languages = os.environ.get("AAROGYA_TESSERACT_LANGUAGES", "ara+eng+fra").split("+")
+        languages = [language for language in requested_languages if language in installed_languages]
+        if not languages:
+            return jsonify({"error": "Install a Tesseract language pack (eng, ara, or fra) to enable prescription OCR."}), 503
+
         gray = ImageOps.autocontrast(image.convert("L"))
-        text = pytesseract.image_to_string(gray, lang="eng", config="--psm 6")
+        # Light binarization helps Tesseract with photographed prescriptions.
+        threshold = gray.point(lambda pixel: 255 if pixel > 130 else 0)
+        text = pytesseract.image_to_string(threshold, lang="+".join(languages), config="--psm 6")
         lines = _extract_prescription_lines(text)
         return jsonify({
             "status": "ocr_extracted",
             "filename": filename,
             "raw_text": text,
             "medicine_lines": lines,
-            "ocr_engine": "Tesseract OCR (English)",
+            "ocr_engine": f"Tesseract OCR ({'+'.join(languages)})",
             "notice": "OCR may misread handwriting, medicine names, or doses. Verify every field against the original prescription; this tool does not provide dosage advice.",
         })
     except ValueError as exc:

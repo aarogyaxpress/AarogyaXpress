@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { supabase } from "../lib/supabase"
 import { auth } from "../firebase"
+import { extractPrescriptionText } from "../lib/prescriptionOcr"
 
 const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY
 
@@ -17,10 +18,10 @@ function frequencyToTime(freq) {
   return "2:00 PM";
 }
 
-async function analyzeWithGemini(base64, mimeType) {
+async function analyzeWithGemini(base64, mimeType, extractedText = "") {
   const genAI = new GoogleGenerativeAI(GEMINI_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-  const prompt = `You are an expert pharmacist and medical AI. Analyze this medicine image/prescription and return ONLY valid JSON (no markdown):
+  const prompt = `Read the medicine label or prescription and return ONLY valid JSON (no markdown). Transcribe only details visible in the supplied image or OCR text. Never guess medicine names, dosage, frequency, duration, instructions, price, uses, or safety warnings. Use null for unknown scalar values and [] for unknown lists. Do not provide dosage advice.
 {
   "name": "medicine name",
   "brand": "brand name if visible",
@@ -33,10 +34,13 @@ async function analyzeWithGemini(base64, mimeType) {
   "sideEffects": ["common side effects"],
   "price": { "min": number_inr, "max": number_inr },
   "uses": ["primary uses/indications"],
-  "pillsRemaining": 14,
-  "pharmacyDistance": "0.3 km"
+  "pillsRemaining": null,
+  "pharmacyDistance": null
 }`;
-  const res = await model.generateContent([prompt, { inlineData: { data: base64, mimeType } }]);
+  const requestParts = extractedText
+    ? [prompt, `OCR transcription from the prescription (may contain recognition errors):\n${extractedText}`]
+    : [prompt, { inlineData: { data: base64, mimeType } }];
+  const res = await model.generateContent(requestParts);
   const text = res.response.text().replace(/```json/gi,"").replace(/```/g,"").trim();
   return JSON.parse(text);
 }
@@ -71,21 +75,24 @@ const ScanPage = () => {
 
   const doScan = async (base64, mimeType) => {
     setScanning(true);
+    setErrorMsg("");
     try {
-      const data = await analyzeWithGemini(base64, mimeType);
+      const bytes = Uint8Array.from(atob(base64), character => character.charCodeAt(0));
+      const file = new File([bytes], "prescription-image", { type: mimeType });
+      let extractedText = "";
+      if (mimeType.startsWith("image/")) {
+        try {
+          const ocrResult = await extractPrescriptionText(file);
+          extractedText = ocrResult?.raw_text || "";
+        } catch (ocrError) {
+          console.warn("Prescription OCR unavailable; using image analysis:", ocrError);
+        }
+      }
+      const data = await analyzeWithGemini(base64, mimeType, extractedText);
       setScanData(data);
       setScanComplete(true);
     } catch (e) {
-      setScanData({
-        name:"Paracetamol", brand:"Crocin", dosage:"500mg", type:"Tablet",
-        frequency:"Twice daily", duration:"3 days", instructions:"Take after food",
-        precautions:["Avoid alcohol","Don't exceed 4g/day","Consult if pregnant"],
-        sideEffects:["Nausea","Rash (rare)","Liver damage (overdose)"],
-        price:{ min:15, max:40 },
-        uses:["Fever","Headache","Pain relief","Cold symptoms"],
-        pillsRemaining:14, pharmacyDistance:"0.3 km"
-      });
-      setScanComplete(true);
+      setErrorMsg(e.message || "Could not read this prescription. Please try a clearer photo.");
     } finally { setScanning(false); }
   };
 
@@ -201,7 +208,7 @@ const ScanPage = () => {
           <div style={{ display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap" }}>
             <span style={{ background:"rgba(255,255,255,0.92)",color:"#5a7a3a",fontSize:12,fontWeight:800,borderRadius:20,padding:"4px 12px" }}>{scanData.dosage}</span>
             <span style={{ background:"rgba(255,255,255,0.92)",color:"#5a7a3a",fontSize:12,fontWeight:800,borderRadius:20,padding:"4px 12px" }}>{scanData.type}</span>
-            <span style={{ background:"rgba(255,255,255,0.18)",color:"white",fontSize:12,fontWeight:700,borderRadius:20,padding:"4px 12px" }}>{frequencyToTime(scanData.frequency)}</span>
+            <span style={{ background:"rgba(255,255,255,0.18)",color:"white",fontSize:12,fontWeight:700,borderRadius:20,padding:"4px 12px" }}>{scanData.frequency ? frequencyToTime(scanData.frequency) : "Schedule not identified"}</span>
           </div>
         </div>
 
@@ -271,7 +278,7 @@ const ScanPage = () => {
               <>
                 <div style={{ background:"linear-gradient(135deg,#3e4e26,#5a6e3a)",borderRadius:20,padding:"20px",marginBottom:14,textAlign:"center" }}>
                   <div style={{ color:"rgba(255,255,255,.7)",fontSize:12,fontWeight:700,marginBottom:8 }}>ESTIMATED PRICE</div>
-                  <div style={{ color:"#fff",fontWeight:900,fontSize:36 }}>₹{scanData.price?.min || 20}<span style={{ fontSize:18,fontWeight:600 }}> – ₹{scanData.price?.max || 60}</span></div>
+                  <div style={{ color:"#fff",fontWeight:900,fontSize:scanData.price?.min != null && scanData.price?.max != null ? 36 : 18 }}>{scanData.price?.min != null && scanData.price?.max != null ? <>₹{scanData.price.min}<span style={{ fontSize:18,fontWeight:600 }}> – ₹{scanData.price.max}</span></> : "Price not identified"}</div>
                   <div style={{ color:"rgba(255,255,255,.65)",fontSize:12,marginTop:4 }}>Per strip · Price may vary by pharmacy</div>
                 </div>
                 <div style={{ background:"white",borderRadius:20,padding:"16px 18px",border:"1px solid #f0ede5",marginBottom:14,boxShadow:"0 2px 10px rgba(0,0,0,.06)" }}>
@@ -279,7 +286,7 @@ const ScanPage = () => {
                     <div style={{ width:44,height:44,borderRadius:"50%",background:"#ffeaea",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20 }}>📍</div>
                     <div>
                       <div style={{ fontWeight:800,fontSize:14,color:"#1e2a12" }}>Health Pharmacy</div>
-                      <div style={{ fontSize:12,color:"#8a9a7a" }}>{scanData.pharmacyDistance || "0.3 km"} away</div>
+                      {scanData.pharmacyDistance && <div style={{ fontSize:12,color:"#8a9a7a" }}>{scanData.pharmacyDistance} away</div>}
                     </div>
                     <button style={{ marginLeft:"auto",background:"#3e4e26",color:"white",border:"none",borderRadius:10,padding:"8px 14px",fontSize:11,fontWeight:800,cursor:"pointer" }}>Navigate →</button>
                   </div>
@@ -360,6 +367,7 @@ const ScanPage = () => {
             </div>
           </div>
           <div style={{ color:"rgba(255,255,255,.4)",fontSize:12,textAlign:"center",marginTop:16 }}>Point camera at medicine packaging or prescription</div>
+          {errorMsg && <div role="alert" style={{ color:"#ffd5c8",fontSize:12,textAlign:"center",marginTop:10 }}>{errorMsg}</div>}
         </div>
       ) : (
         <div style={{ width:"100%",maxWidth:420,padding:"0 16px" }}>
@@ -381,6 +389,7 @@ const ScanPage = () => {
           </div>
         </div>
       )}
+      {errorMsg && mode !== "camera" && <div role="alert" style={{ color:"#ffd5c8",fontSize:12,textAlign:"center",marginTop:10,padding:"0 20px" }}>{errorMsg}</div>}
     </div>
   );
 };

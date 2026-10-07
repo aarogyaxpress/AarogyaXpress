@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "../lib/supabase";
 import { auth } from "../firebase";
+import { extractPrescriptionText } from "../lib/prescriptionOcr";
 
 /* This is the medical document analyzer page */
 export const CONDITION_DOCTOR_MAP = {
@@ -477,7 +478,7 @@ function ResultsView({ result, fileName, onReset, onAddMedicine }) {
 // Pull Gemini key from environment variables
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-async function scanWithGemini(base64Data, mediaType) {
+async function scanWithGemini(base64Data, mediaType, extractedText = "") {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
 
@@ -514,10 +515,9 @@ If a field has no data, use null or empty array [].
 STRICT RULES:
 * Return ONLY JSON, nothing else.`;
 
-  const requestParts = [
-    prompt,
-    { inlineData: { data: base64Data, mimeType: mediaType } }
-  ];
+  const requestParts = extractedText
+    ? [prompt, `OCR transcription from the uploaded document (may contain recognition errors):\n${extractedText}`]
+    : [prompt, { inlineData: { data: base64Data, mimeType: mediaType } }];
 
   try {
     const result = await model.generateContent(requestParts);
@@ -638,8 +638,18 @@ export default function MedicalDocAnalyzer() {
         setProgress(p => p < 85 ? p + 5 : p);
       }, 600);
 
-      // Gemini API Used Here
-      const parsedData = await scanWithGemini(base64, file.type);
+      // Run multilingual Tesseract OCR for images, then use Gemini to structure
+      // the recognized text. If OCR is unavailable, retain direct image analysis.
+      let extractedText = "";
+      if (file.type.startsWith("image/")) {
+        try {
+          const ocrResult = await extractPrescriptionText(file);
+          extractedText = ocrResult?.raw_text || "";
+        } catch (ocrError) {
+          console.warn("Prescription OCR unavailable; falling back to image analysis:", ocrError);
+        }
+      }
+      const parsedData = await scanWithGemini(base64, file.type, extractedText);
 
       clearInterval(ticker);
       setProgress(100);

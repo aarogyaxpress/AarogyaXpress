@@ -18,6 +18,10 @@ brew install tesseract  # skip if `tesseract --version` already works
 python ml-service/app.py
 ```
 
+For multilingual prescription text, install Tesseract's Arabic and French language data as well as English (`brew install tesseract-lang` on macOS, or the matching `tesseract-ocr-ara` and `tesseract-ocr-fra` packages on Debian/Ubuntu). The OCR endpoint uses whichever of `ara`, `eng`, and `fra` are installed. Set `AAROGYA_TESSERACT_LANGUAGES` to a `+`-separated list to select languages explicitly.
+
+The Doc Analyser and medicine scanner use Tesseract.js in the browser by default, including on Vercel. If `VITE_AI_SERVICE_URL` is explicitly set, image OCR is sent to this Flask endpoint instead. To use the Python service from a hosted frontend, deploy it to a separate Python-capable host, set `VITE_AI_SERVICE_URL` in the frontend's build environment to its HTTPS origin, and set `AAROGYA_ALLOWED_ORIGIN` on the service to the exact frontend origin. Vercel's static Vite deployment does not run this Flask service. If browser OCR fails, the React app falls back to its existing image analysis.
+
 The CheXNet checkpoint is loaded locally on the first X-ray request. Start the React app in another terminal with `npm run dev`; the UI calls `http://localhost:8001`.
 
 ## Retinal training data
