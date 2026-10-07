@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback } from "react";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "../lib/supabase";
 import { auth } from "../firebase";
 import { extractPrescriptionText } from "../lib/prescriptionOcr";
+import { generateGeminiText } from "../lib/gemini";
 
 /* This is the medical document analyzer page */
 export const CONDITION_DOCTOR_MAP = {
@@ -475,13 +475,7 @@ function ResultsView({ result, fileName, onReset, onAddMedicine }) {
   );
 }
 
-// Pull Gemini key from environment variables
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-
 async function scanWithGemini(base64Data, mediaType, extractedText = "") {
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-
   const prompt = `You are a medical document analysis expert. Carefully analyse this medical document and extract all clinical information.
 
 Return ONLY a valid JSON object (no markdown, no backticks, no explanation) with this exact structure:
@@ -520,10 +514,7 @@ STRICT RULES:
     : [prompt, { inlineData: { data: base64Data, mimeType: mediaType } }];
 
   try {
-    const result = await model.generateContent(requestParts);
-    const text = result.response.text();
-
-    console.log("RAW GEMINI OUTPUT:", text); // Debugging hook
+    const text = await generateGeminiText(requestParts);
 
     const clean = text.replace(/```json/gi, "").replace(/```/g, "").trim();
     return JSON.parse(clean);

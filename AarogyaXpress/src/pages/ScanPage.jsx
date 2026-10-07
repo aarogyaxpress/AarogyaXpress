@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { supabase } from "../lib/supabase"
 import { auth } from "../firebase"
 import { extractPrescriptionText } from "../lib/prescriptionOcr"
-
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY
+import { generateGeminiText } from "../lib/gemini"
 
 function frequencyToTime(freq) {
   if (!freq) return "2:00 PM";
@@ -19,8 +17,6 @@ function frequencyToTime(freq) {
 }
 
 async function analyzeWithGemini(base64, mimeType, extractedText = "") {
-  const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
   const prompt = `Read the medicine label or prescription and return ONLY valid JSON (no markdown). Transcribe only details visible in the supplied image or OCR text. Never guess medicine names, dosage, frequency, duration, instructions, price, uses, or safety warnings. Use null for unknown scalar values and [] for unknown lists. Do not provide dosage advice.
 {
   "name": "medicine name",
@@ -40,9 +36,9 @@ async function analyzeWithGemini(base64, mimeType, extractedText = "") {
   const requestParts = extractedText
     ? [prompt, `OCR transcription from the prescription (may contain recognition errors):\n${extractedText}`]
     : [prompt, { inlineData: { data: base64, mimeType } }];
-  const res = await model.generateContent(requestParts);
-  const text = res.response.text().replace(/```json/gi,"").replace(/```/g,"").trim();
-  return JSON.parse(text);
+  const text = await generateGeminiText(requestParts);
+  const clean = text.replace(/```json/gi,"").replace(/```/g,"").trim();
+  return JSON.parse(clean);
 }
 
 const ScanPage = () => {

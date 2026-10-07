@@ -1,7 +1,5 @@
 import { useState, useRef } from "react";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+import { generateGeminiText } from "../lib/gemini";
 
 const CONDITIONS = [
   { name: "Diabetic Retinopathy", risk: "High", icon: "🔴", desc: "Damage to blood vessels in retinal tissue due to diabetes" },
@@ -23,8 +21,6 @@ export default function NetraAI() {
     setProgress(10);
     const ticker = setInterval(() => setProgress(p => p < 85 ? p + 7 : p), 600);
     try {
-      const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
       const prompt = `You are an AI ophthalmology specialist analyzing a retinal/eye image or medical report. Extract diagnostic information and return ONLY valid JSON (no markdown):
 {
   "condition": "primary finding or 'Healthy Eye'",
@@ -35,26 +31,16 @@ export default function NetraAI() {
   "urgency": "Routine | Soon | Urgent | Emergency",
   "details": "2-3 sentence summary"
 }`;
-      const res = await model.generateContent([prompt, { inlineData: { data: base64, mimeType: mime } }]);
-      const text = res.response.text().replace(/```json/gi,"").replace(/```/g,"").trim();
-      setResult(JSON.parse(text));
+      const text = await generateGeminiText([prompt, { inlineData: { data: base64, mimeType: mime } }]);
+      const clean = text.replace(/```json/gi,"").replace(/```/g,"").trim();
+      setResult(JSON.parse(clean));
       clearInterval(ticker);
       setProgress(100);
       setTimeout(() => setStep("result"), 400);
     } catch (e) {
       clearInterval(ticker);
-      // Rich fallback
-      setResult({
-        condition: "Healthy Eye — No Anomalies Detected",
-        severity: "Normal",
-        confidence: 91,
-        findings: ["Clear retinal image", "No signs of haemorrhage", "Optic disc appears healthy", "Macula looks normal"],
-        recommendations: ["Routine annual eye check", "Wear UV-protection sunglasses", "Monitor screen time"],
-        urgency: "Routine",
-        details: "The eye scan appears healthy with no immediate concerns. Regular monitoring is advised for preventive care."
-      });
-      setProgress(100);
-      setTimeout(() => setStep("result"), 400);
+      setErrorMsg(e.message || "Could not analyze this scan. Please try again.");
+      setStep("error");
     }
   };
 
@@ -155,6 +141,16 @@ export default function NetraAI() {
                 </div>
                 <div style={{ fontSize:11,color:"#8a9a7a",fontWeight:700 }}>{progress}% complete</div>
               </div>
+            </div>
+          )}
+
+          {step === "error" && (
+            <div role="alert" style={{ background:"white",borderRadius:20,padding:20,boxShadow:"0 2px 14px rgba(0,0,0,.07)" }}>
+              <div style={{ fontSize:15,fontWeight:800,color:"#a4262c",marginBottom:8 }}>Analysis unavailable</div>
+              <div style={{ fontSize:13,color:"#5c6255",lineHeight:1.5,marginBottom:16 }}>{errorMsg}</div>
+              <button onClick={() => { setStep("home"); setProgress(0); }} style={{ background:"#3e4e26",color:"white",border:0,borderRadius:12,padding:"11px 18px",fontWeight:800,cursor:"pointer" }}>
+                Try Again
+              </button>
             </div>
           )}
 
