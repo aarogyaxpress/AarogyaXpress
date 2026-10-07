@@ -2,16 +2,6 @@
 import { useState, useEffect, useRef } from "react"
 import { auth } from "../firebase"
 import { supabase } from "../lib/supabase"
-import { createClient } from "@supabase/supabase-js"
-
-// Service-role client bypasses RLS entirely.
-// Safe to use here because this runs in the browser only when the user
-// is Firebase-authenticated. The service key is already in the bundle
-// via VITE env, which is the same pattern as the anon key.
-const supabaseAdmin = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_SERVICE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY
-)
 import QRCode from "react-qr-code"
 
 /* ─── helpers ──────────────────────────────────────────────────────────────── */
@@ -165,8 +155,10 @@ export default function FamilyPage() {
   const handleGenInvite = async () => {
     if (!dbUser) return
     const code = genCode()
-    // Use supabaseAdmin (service role) to bypass RLS — Firebase users have no Supabase auth.uid()
-    const { error } = await supabaseAdmin.from("family_invites").insert({
+    // Keep database access on the public anon client. A service-role key must
+    // never be bundled into this browser application; configure RLS policies
+    // for Firebase-backed users or move privileged writes to a server endpoint.
+    const { error } = await supabase.from("family_invites").insert({
       inviter_user_id: dbUser.id,
       invite_code: code,
       invitee_identifier: inviteeId.trim() || null,
@@ -194,8 +186,8 @@ export default function FamilyPage() {
     if (!joinCode.trim() || !dbUser) return
     setJoining(true)
     try {
-      // Fetch invite (use admin client to bypass RLS on select too)
-      const { data: inv, error: fetchErr } = await supabaseAdmin
+      // Fetch the invite through the public client; RLS must authorize this access.
+      const { data: inv, error: fetchErr } = await supabase
         .from("family_invites").select("*")
         .eq("invite_code", joinCode.trim().toUpperCase()).eq("status","pending").single()
       if (fetchErr || !inv) { toast_("❌ Invalid or expired code"); return }
@@ -205,13 +197,13 @@ export default function FamilyPage() {
       // If identifier exists, strictly match (mocking Aadhaar/phone checking for simplicity here, assuming they are logged in with correct email/phone based on their dbUser)
       // In a real app we would verify this against their verified claims.
       
-      // Create bidirectional links via admin client
-      const { error: linkErr } = await supabaseAdmin.from("family_links").upsert([
+      // Create bidirectional links through the public client; RLS must authorize these writes.
+      const { error: linkErr } = await supabase.from("family_links").upsert([
         { user_id:inv.inviter_user_id, linked_user_id:dbUser.id, relation:relation, access_level:accessLevel, status:"accepted" },
         { user_id:dbUser.id, linked_user_id:inv.inviter_user_id, relation:relation, access_level:accessLevel, status:"accepted" },
       ],{onConflict:"user_id,linked_user_id"})
       if (linkErr) { console.error(linkErr); toast_("❌ Failed to link: " + linkErr.message); return }
-      await supabaseAdmin.from("family_invites").update({status:"accepted"}).eq("id",inv.id)
+      await supabase.from("family_invites").update({status:"accepted"}).eq("id",inv.id)
       toast_("✅ Family linked successfully!")
       setJoinCode("")
       await loadMembers(dbUser.id)
@@ -233,7 +225,7 @@ export default function FamilyPage() {
   const handleDoctorToken = async () => {
     if (!drName.trim()) { toast_("Enter doctor name first"); return }
     const token = genToken()
-    const { error } = await supabaseAdmin.from("doctor_access").insert({
+    const { error } = await supabase.from("doctor_access").insert({
       patient_user_id: dbUser.id,
       doctor_name: drName.trim(),
       doctor_email: drEmail.trim() || null,
