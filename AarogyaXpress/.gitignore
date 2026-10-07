@@ -14,6 +14,7 @@ dist-ssr
 ml-service/artifacts/chexnet/model.pth.tar
 ml-service/.venv/
 ml-service/__pycache__/
+ml-service/**/__pycache__/
 
 # Editor directories and files
 .vscode/*

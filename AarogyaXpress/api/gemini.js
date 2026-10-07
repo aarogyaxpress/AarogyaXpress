@@ -1,23 +1,9 @@
+import { authenticatedUserId } from "./_lib/firebaseAuth.js";
+
 const USER_RATE_LIMIT = 20;
 const WINDOW_MS = 60_000;
 const rateBuckets = new Map();
 const MAX_REQUEST_BYTES = 4 * 1024 * 1024;
-
-async function verifyFirebaseToken(idToken) {
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(process.env.FIREBASE_API_KEY || "AIzaSyCJ686_Ir--GInCc2SUXBKZJ4GITDjDOUY")}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken }),
-    }
-  );
-  if (!response.ok) return null;
-  const result = await response.json();
-  const user = result.users?.[0];
-  if (!user || user.localId === undefined || user.disabled) return null;
-  return user.localId;
-}
 
 function checkRateLimit(userId) {
   const now = Date.now();
@@ -38,11 +24,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed." });
   }
 
-  const authHeader = req.headers.authorization || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (!idToken) return res.status(401).json({ error: "Sign in before using AI analysis." });
-
-  const userId = await verifyFirebaseToken(idToken).catch(() => null);
+  const userId = await authenticatedUserId(req);
   if (!userId) return res.status(401).json({ error: "Your session expired. Sign in again." });
   if (!checkRateLimit(userId)) {
     return res.status(429).json({ error: "AI request limit reached. Please wait a minute and try again." });
