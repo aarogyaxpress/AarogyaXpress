@@ -22,18 +22,23 @@ CREATE TABLE users (
   name TEXT,
   email TEXT,
   phone TEXT,
+  location TEXT,
   age INTEGER,
   gender TEXT,
   blood_group TEXT,
   weight NUMERIC,
   height NUMERIC,
   allergies TEXT,
+  chronic_diseases TEXT,
   emergency_name TEXT,
   emergency_contact TEXT,
+  profile_completed BOOLEAN NOT NULL DEFAULT FALSE,
   photo_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Existing deployments should apply supabase/migrations/20261008_profile_setup.sql.
 
 CREATE TRIGGER update_users_updated_at 
 BEFORE UPDATE ON users 

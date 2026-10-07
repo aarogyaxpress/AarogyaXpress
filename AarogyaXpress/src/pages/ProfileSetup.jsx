@@ -1,12 +1,12 @@
 //Date : 
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { auth } from "../firebase"
-import { supabase } from "../lib/supabase"
+import { saveProfile } from "../lib/profile"
 
 export default function ProfileSetup() {
   const navigate = useNavigate()
-  const user = auth.currentUser
+  const [user, setUser] = useState(auth.currentUser)
 
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -27,6 +27,19 @@ export default function ProfileSetup() {
     height: "",
     weight: "",
   })
+
+  useEffect(() => auth.onAuthStateChanged((currentUser) => {
+    if (!currentUser) {
+      navigate("/login", { replace: true })
+      return
+    }
+    setUser(currentUser)
+    setForm((current) => ({
+      ...current,
+      name: current.name || currentUser.displayName || "",
+      email: currentUser.email || "",
+    }))
+  }), [navigate])
 
   const set = k => v => {
     setForm(p => ({ ...p, [k]: v }))
@@ -59,27 +72,28 @@ export default function ProfileSetup() {
 
   const handleSubmit = async () => {
     if (!validate()) return
+    if (!auth.currentUser) {
+      setErrors({ submit: "Your session expired. Sign in again." })
+      return
+    }
     setLoading(true)
     try {
       const payload = {
-        firebase_uid: user.uid,
         name: form.name,
         email: form.email,
         phone: `+91${form.phone}`,
         location: form.location,
-        age: form.age ? parseInt(form.age) : null,
+        age: form.age ? parseInt(form.age, 10) : null,
         gender: form.gender,
         blood_group: form.bloodGroup,
         allergies: form.allergies,
         chronic_diseases: form.chronicDiseases,
-        emergency_contact_name: form.emergencyName,
-        emergency_contact_phone: `+91${form.emergencyPhone}`,
+        emergency_name: form.emergencyName,
+        emergency_contact: `+91${form.emergencyPhone}`,
         height: form.height ? parseFloat(form.height) : null,
         weight: form.weight ? parseFloat(form.weight) : null,
-        profile_completed: true,
       }
-      const { error } = await supabase.from("users").upsert(payload, { onConflict: "firebase_uid" })
-      if (error) throw error
+      await saveProfile(payload)
       navigate("/")
     } catch (err) {
       setErrors({ submit: err.message || "Failed. Try again." })

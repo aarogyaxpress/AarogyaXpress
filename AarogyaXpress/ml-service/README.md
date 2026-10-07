@@ -5,6 +5,7 @@ This service makes the current web app's image workflows honest and runnable:
 - `/api/prescription/ocr`: local Tesseract OCR plus transparent field extraction; every candidate needs human confirmation.
 - `/api/xray/analyze`: local CheXNet DenseNet121 checkpoint from `artifacts/chexnet/model.pth.tar`; reports raw model signals, not a diagnosis.
 - `/api/retina/analyze`: IDRiD-trained DenseNet121 baseline. This route stays unavailable until you train the local checkpoint.
+- `/api/fingerprint/analyze`: optional ResNet50 research checkpoint from the fingerprint blood-group project; returns unvalidated model class scores only.
 
 ## Start locally (macOS)
 
@@ -47,6 +48,22 @@ The training script uses an ImageNet-initialized DenseNet121 and fine-tunes the 
 ## X-ray model scope
 
 The X-ray service uses the cloned CheXNet DenseNet121 checkpoint trained on NIH ChestX-ray14. Its scores are uncalibrated; it is not a TB-specific Indian model. To build an India-specific disease model, agree on the target and reference labels with clinical partners, train/fine-tune on appropriately governed data, and evaluate on held-out institutions.
+
+## Fingerprint blood-group research model
+
+The React route `/fingerprint-research` calls `/api/fingerprint/analyze`. Vercel hosts the frontend; this Flask inference service must run on a separate Python-capable host. Do not deploy the service publicly with personal fingerprints until you have an approved privacy/consent plan.
+
+The source checkpoint is 94 MB and is intentionally excluded from Git. After cloning `https://github.com/krishna111809/fingerprint-based-blood-group-detection.git`, copy `test/model_blood_group_detection_resnet.h5` to `ml-service/artifacts/fingerprint_blood_group_resnet.h5`, then install the optional runtime in Python 3.11:
+
+```bash
+python3.11 -m venv ml-service/.venv-fingerprint
+source ml-service/.venv-fingerprint/bin/activate
+python -m pip install -r ml-service/requirements.txt
+python -m pip install -r ml-service/fingerprint-requirements.txt
+python ml-service/app.py
+```
+
+Set `VITE_AI_SERVICE_URL` to the deployed service's HTTPS origin in Vercel and set `AAROGYA_ALLOWED_ORIGIN` on the service to the exact frontend origin. The included notebook split reuses its validation set for evaluation and does not establish clinical accuracy. Scores are experimental model outputs, never confirmed blood groups. The original dataset contains biometric images; do not copy it into this app repository or publish it.
 
 ## Safety and data handling
 

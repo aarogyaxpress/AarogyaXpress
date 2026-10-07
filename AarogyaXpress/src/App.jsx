@@ -5,7 +5,7 @@ import ScanCard from "./components/ScanCard"
 import QuickActions from "./components/QuickActions"
 import FeatureCards from "./components/FeatureCards"
 import BottomNav from "./components/BottomNav"
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import ScanPage from "./pages/ScanPage"
 import LoginPage from "./pages/LoginPage"
 import ProfileSetup from "./pages/ProfileSetup"
@@ -18,9 +18,10 @@ import DoctorPage from "./pages/DoctorPage"
 import AmbulancePage from "./pages/AmbulancePage"
 import NetraAI from "./pages/NetraAI"
 import ChestXrayAI from "./pages/ChestXrayAI"
+import FingerprintBloodGroupResearch from "./pages/FingerprintBloodGroupResearch"
 import FamilyPage from "./pages/FamilyPage"
 import { auth } from "./firebase"
-import { supabase } from "./lib/supabase"
+import { getProfileStatus } from "./lib/profile"
 import { MedicineProvider } from "./context/MedicineContext"
 
 function Home() {
@@ -50,14 +51,10 @@ function ProtectedSetup() {
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {
-      if (!user) { setChecking(false); return }
+      if (!user) { setNeedsSetup(false); setChecking(false); return }
       try {
-        const { data } = await supabase
-          .from("users")
-          .select("profile_completed")
-          .eq("firebase_uid", user.uid)
-          .single()
-        setNeedsSetup(!data?.profile_completed)
+        const profile = await getProfileStatus()
+        setNeedsSetup(!profile.profile_completed)
       } catch {
         setNeedsSetup(true)
       } finally {
@@ -73,6 +70,7 @@ function ProtectedSetup() {
     </div>
   )
 
+  if (!auth.currentUser) return <Navigate to="/login" replace />
   return needsSetup ? <ProfileSetup /> : <Navigate to="/" replace />
 }
 
@@ -94,6 +92,7 @@ function App() {
           <Route path="/ambulance" element={<Layout><AmbulancePage /></Layout>} />
           <Route path="/netra"    element={<Layout><NetraAI /></Layout>} />
           <Route path="/xray"     element={<Layout><ChestXrayAI /></Layout>} />
+          <Route path="/fingerprint-research" element={<Layout><FingerprintBloodGroupResearch /></Layout>} />
           <Route path="/family"   element={<Layout><FamilyPage /></Layout>} />
         </Routes>
       </BrowserRouter>

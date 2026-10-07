@@ -24,6 +24,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 ROOT = Path(__file__).resolve().parent
 RETINA_CHECKPOINT = Path(os.environ.get("AAROGYA_RETINA_CHECKPOINT", ROOT / "artifacts" / "retina_idrid_densenet121.pt"))
+FINGERPRINT_CHECKPOINT = Path(os.environ.get("AAROGYA_FINGERPRINT_CHECKPOINT", ROOT / "artifacts" / "fingerprint_blood_group_resnet.h5"))
 from chexnet_model import CHECKPOINT as XRAY_CHECKPOINT, predict as predict_chexnet
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/tiff"}
@@ -37,6 +38,8 @@ _xray_model = None
 _xray_lock = threading.Lock()
 _retina_model = None
 _retina_lock = threading.Lock()
+_fingerprint_model = None
+_fingerprint_lock = threading.Lock()
 
 
 def _read_upload(field: str = "image") -> tuple[Image.Image, str]:
@@ -94,10 +97,73 @@ def health():
         "models": {
             "chest_xray": {"available": XRAY_CHECKPOINT.exists(), "weights": str(XRAY_CHECKPOINT), "loaded": _xray_model is not None},
             "retinal_fundus": {"available": RETINA_CHECKPOINT.exists(), "checkpoint": RETINA_CHECKPOINT.name},
+            "fingerprint_blood_group_research": {"available": FINGERPRINT_CHECKPOINT.exists(), "checkpoint": FINGERPRINT_CHECKPOINT.name},
             "prescription_ocr": {"available": ocr_available},
         },
         "notice": "Research prototype only; not for diagnosis or treatment decisions.",
     })
+
+
+def _get_fingerprint_model():
+    global _fingerprint_model
+    if not FINGERPRINT_CHECKPOINT.exists():
+        return None
+    if _fingerprint_model is None:
+        with _fingerprint_lock:
+            if _fingerprint_model is None:
+                try:
+                    from tensorflow.keras.models import load_model
+                except ImportError as exc:
+                    raise RuntimeError("Install ml-service/fingerprint-requirements.txt with Python 3.11 to enable this research model.") from exc
+                _fingerprint_model = load_model(FINGERPRINT_CHECKPOINT, compile=False)
+    return _fingerprint_model
+
+
+@app.post("/api/fingerprint/analyze")
+def analyze_fingerprint():
+    try:
+        image, filename = _read_upload()
+        model = _get_fingerprint_model()
+        if model is None:
+            return jsonify({
+                "error": "Fingerprint research checkpoint is not installed on this model service.",
+                "model_ready": False,
+            }), 503
+
+        import numpy as np
+        from tensorflow.keras.applications.resnet50 import preprocess_input
+        from tensorflow.keras.preprocessing.image import img_to_array
+
+        image = image.convert("RGB").resize((256, 256))
+        tensor = img_to_array(image).astype("float32")
+        tensor = preprocess_input(np.expand_dims(tensor, axis=0))
+        scores = np.asarray(model.predict(tensor, verbose=0))[0]
+        labels = ["A+", "A-", "AB+", "AB-", "B+", "B-", "O+", "O-"]
+        if scores.shape[0] != len(labels):
+            raise ValueError("The fingerprint checkpoint does not return the expected eight classes.")
+        ranked = sorted(
+            [{"model_class": label, "score": round(float(score), 4)} for label, score in zip(labels, scores)],
+            key=lambda item: item["score"],
+            reverse=True,
+        )
+        return jsonify({
+            "status": "experimental_research_output",
+            "filename": filename,
+            "model": "Fingerprint Blood Group Detection · ResNet50 research checkpoint",
+            "top_model_class": ranked[0]["model_class"],
+            "class_scores": ranked,
+            "score_note": "Unvalidated model scores only. They are not a blood-group test or calibrated probabilities.",
+            "clinical_use": False,
+            "review_required": True,
+            "image_storage": "not_stored",
+        })
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 503
+    except Exception:
+        app.logger.exception("Fingerprint research inference failed")
+        return jsonify({"error": "Fingerprint research model could not process this image. Check the model service logs."}), 500
 
 
 @app.post("/api/xray/analyze")

@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 ml-service/artifacts/chexnet/model.pth.tar
+ml-service/artifacts/fingerprint_blood_group_resnet.h5
 ml-service/.venv/
 ml-service/__pycache__/
 ml-service/**/__pycache__/

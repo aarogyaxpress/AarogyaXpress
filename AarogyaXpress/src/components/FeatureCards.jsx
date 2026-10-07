@@ -309,6 +309,19 @@ export default function FeatureCards() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6" /></svg>
           </div>
         </div>
+
+        <div className="feature-card olive-card" onClick={() => navigate("/fingerprint-research")}>
+          <div className="feature-card-text">
+            <div className="feature-tags">
+              <span className="feature-tag">Research</span>
+              <span className="feature-tag">Experimental</span>
+            </div>
+            <div className="feature-title">Fingerprint blood group</div>
+            <div className="feature-desc">Explore the model as a research demo</div>
+          </div>
+          <div className="feature-icon-wrap"><span style={{ fontSize: 24 }}>🖐️</span></div>
+          <div className="feature-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6" /></svg></div>
+        </div>
       </div>
 
       {/* PILL TRACKER */}
