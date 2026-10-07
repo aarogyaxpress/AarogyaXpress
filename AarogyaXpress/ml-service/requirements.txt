@@ -1,0 +1,12 @@
+Flask>=3.0,<4
+flask-cors>=4.0,<6
+numpy>=1.26,<3
+Pillow>=10,<12
+pytesseract>=0.3.10,<0.4
+torch>=2.2
+torchvision>=0.17
+torchxrayvision>=1.2
+pydicom>=2.4,<4
+pandas>=2.1,<4
+scikit-learn>=1.4,<2
+tqdm>=4.66,<5

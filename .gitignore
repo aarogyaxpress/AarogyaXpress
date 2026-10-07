@@ -1,0 +1,14 @@
+.DS_Store
+**/node_modules/
+**/.venv/
+**/__pycache__/
+**/dist/
+**/.model-cache/
+**/.streamlit/
+**/*.pyc
+**/.git/
+.nested-git-backups/
+**/artifacts/chexnet/model.pth.tar
+*.log
+.env
+**/.env
