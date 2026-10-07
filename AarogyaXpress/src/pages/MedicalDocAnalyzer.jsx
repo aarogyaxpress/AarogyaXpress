@@ -509,9 +509,11 @@ If a field has no data, use null or empty array [].
 STRICT RULES:
 * Return ONLY JSON, nothing else.`;
 
-  const requestParts = extractedText
-    ? [prompt, `OCR transcription from the uploaded document (may contain recognition errors):\n${extractedText}`]
-    : [prompt, { inlineData: { data: base64Data, mimeType: mediaType } }];
+  const requestParts = [prompt];
+  if (extractedText) {
+    requestParts.push(`OCR transcription from the uploaded document (may contain recognition errors; verify it against the original):\n${extractedText}`);
+  }
+  requestParts.push({ inlineData: { data: base64Data, mimeType: mediaType } });
 
   try {
     const text = await generateGeminiText(requestParts);

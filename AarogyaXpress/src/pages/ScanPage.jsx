@@ -33,9 +33,11 @@ async function analyzeWithGemini(base64, mimeType, extractedText = "") {
   "pillsRemaining": null,
   "pharmacyDistance": null
 }`;
-  const requestParts = extractedText
-    ? [prompt, `OCR transcription from the prescription (may contain recognition errors):\n${extractedText}`]
-    : [prompt, { inlineData: { data: base64, mimeType } }];
+  const requestParts = [prompt];
+  if (extractedText) {
+    requestParts.push(`OCR transcription from the prescription (may contain recognition errors; verify it against the image):\n${extractedText}`);
+  }
+  requestParts.push({ inlineData: { data: base64, mimeType } });
   const text = await generateGeminiText(requestParts);
   const clean = text.replace(/```json/gi,"").replace(/```/g,"").trim();
   return JSON.parse(clean);
