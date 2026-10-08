@@ -7,19 +7,11 @@ export function MedicineProvider({ children }) {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('aarogya_medicines');
-    if (saved) {
-      setSavedMedicines(JSON.parse(saved));
-    } else {
-      // Pre-seed with Amoxicillin so the home screen isn't empty initially.
-      const initial = [{
-        name: 'Amoxicillin',
-        dosage: '500',
-        instructions: 'Take With Food',
-        pillsRemaining: 12
-      }];
-      setSavedMedicines(initial);
-      localStorage.setItem('aarogya_medicines', JSON.stringify(initial));
+    try {
+      const saved = JSON.parse(localStorage.getItem('aarogya_medicines') || '[]');
+      setSavedMedicines(Array.isArray(saved) ? saved : []);
+    } catch {
+      setSavedMedicines([]);
     }
     setIsLoaded(true);
   }, []);
@@ -27,7 +19,11 @@ export function MedicineProvider({ children }) {
   const addMedicine = (med) => {
     const updated = [...savedMedicines, med];
     setSavedMedicines(updated);
-    localStorage.setItem('aarogya_medicines', JSON.stringify(updated));
+    try {
+      localStorage.setItem('aarogya_medicines', JSON.stringify(updated));
+    } catch (error) {
+      console.warn('Could not save medicines for offline use:', error);
+    }
   };
 
   return (

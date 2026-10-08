@@ -44,6 +44,27 @@ function Layout({ children }) {
   )
 }
 
+function OfflineNotice() {
+  const [offline, setOffline] = useState(!navigator.onLine)
+
+  useEffect(() => {
+    const update = () => setOffline(!navigator.onLine)
+    window.addEventListener("online", update)
+    window.addEventListener("offline", update)
+    return () => {
+      window.removeEventListener("online", update)
+      window.removeEventListener("offline", update)
+    }
+  }, [])
+
+  if (!offline) return null
+  return (
+    <div role="status" style={{ position: "fixed", top: 8, left: 8, right: 8, zIndex: 9999, margin: "0 auto", maxWidth: 460, padding: "9px 12px", borderRadius: 12, background: "#fff4d6", color: "#694f16", boxShadow: "0 3px 12px rgba(0,0,0,.12)", fontSize: 12, fontWeight: 700, textAlign: "center" }}>
+      Offline mode: saved medicines, reminders, and reports are available on this device. Login, AI, and cloud sync need internet.
+    </div>
+  )
+}
+
 // Redirects to "/" if the user's profile is already completed
 function ProtectedSetup() {
   const [checking, setChecking] = useState(true)
@@ -78,6 +99,7 @@ function App() {
   return (
     <MedicineProvider>
       <BrowserRouter>
+        <OfflineNotice />
         <Routes>
           <Route path="/login"    element={<LoginPage />} />
           <Route path="/setup"    element={<ProtectedSetup />} />
