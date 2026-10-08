@@ -41,8 +41,11 @@ export default async function handler(req, res) {
   }
   const input = [];
   for (const part of body.parts) {
-    if (typeof part?.text === "string" && part.text.length <= 20_000) {
-      input.push({ type: "text", text: part.text });
+    // The frontend sends prompt strings directly; also accept the structured
+    // { text } form for older callers.
+    const text = typeof part === "string" ? part : part?.text;
+    if (typeof text === "string" && text.length <= 20_000 && text.trim()) {
+      input.push({ type: "text", text });
       continue;
     }
     const image = part?.inlineData;
@@ -67,7 +70,7 @@ export default async function handler(req, res) {
   const hasPdf = input.some((part) => part.type === "document");
   const groqKey = process.env.GROQ_API_KEY;
   const geminiKey = process.env.GEMINI_API_KEY;
-  const provider = process.env.AI_PROVIDER || (groqKey ? "groq" : "gemini");
+  const provider = process.env.AI_PROVIDER || "groq";
 
   if (provider === "groq" && !hasPdf) {
     if (!groqKey) return res.status(503).json({ error: "Groq is not configured. Add a server-only GROQ_API_KEY in Vercel." });

@@ -10,7 +10,7 @@ Set these in Vercel Project Settings → Environment Variables for Production an
 | `VITE_SUPABASE_ANON_KEY` | Browser build | Supabase publishable key (`sb_publishable_…`) or legacy anon key |
 | `SUPABASE_URL` | Vercel Functions | Same Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Vercel Functions only | Supabase service role/secret key |
-| `AI_PROVIDER` | Vercel Functions | `groq` or `gemini`; defaults to Groq when `GROQ_API_KEY` exists |
+| `AI_PROVIDER` | Vercel Functions | `groq` or `gemini`; defaults to `groq` |
 | `GROQ_API_KEY` | Vercel Functions | Key from GroqCloud; needed for text/image analysis when using Groq |
 | `GROQ_MODEL` | Vercel Functions | Optional; defaults to `qwen/qwen3.8-27b` |
 | `GEMINI_API_KEY` | Vercel Functions | Optional with Groq; needed for PDF analysis in Groq mode |

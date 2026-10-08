@@ -521,8 +521,8 @@ STRICT RULES:
     const clean = text.replace(/```json/gi, "").replace(/```/g, "").trim();
     return JSON.parse(clean);
   } catch (error) {
-    console.error("Gemini API Error Detail:", error);
-    throw new Error(`Gemini Sync Failed: ${error.message}`);
+    console.error("AI document analysis error:", error);
+    throw new Error(`AI sync failed: ${error.message}`);
   }
 }
 
