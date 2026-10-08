@@ -1,41 +1,7 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import { auth } from "../firebase";
+import { getDoctorDirectory, requestDoctorAppointment } from "../lib/doctors";
 
-const SPECIALTIES = [
-  { id:"all", label:"All", icon:"🏥" },
-  { id:"general", label:"General", icon:"👨‍⚕️" },
-  { id:"cardiology", label:"Cardiology", icon:"❤️" },
-  { id:"dermatology", label:"Dermatology", icon:"🧴" },
-  { id:"neurology", label:"Neurology", icon:"🧠" },
-  { id:"orthopedics", label:"Orthopedics", icon:"🦴" },
-  { id:"pediatrics", label:"Pediatrics", icon:"👶" },
-  { id:"psychiatry", label:"Psychiatry", icon:"🧘" },
-  { id:"gynecology", label:"Gynecology", icon:"🌸" },
-  { id:"ophthalmology", label:"Eye Care", icon:"👁️" },
-];
-
-const DOCTORS = [
-  { id:1, name:"Dr. Priya Sharma", specialty:"cardiology", tag:"Cardiology", exp:"12 yrs", fee:600, rating:4.9, reviews:312, avail:"Today", online:true, avatar:"PS", color:"#e84455",
-    bio:"Senior interventional cardiologist with expertise in preventive cardiac care and complex heart procedures." },
-  { id:2, name:"Dr. Arjun Mehta", specialty:"general", tag:"General", exp:"8 yrs", fee:400, rating:4.7, reviews:528, avail:"Today", online:true, avatar:"AM", color:"#4a7a9b",
-    bio:"General physician specialising in chronic disease management, preventive health, and family medicine." },
-  { id:3, name:"Dr. Sneha Patel", specialty:"dermatology", tag:"Dermatology", exp:"6 yrs", fee:500, rating:4.8, reviews:189, avail:"Tomorrow", online:false, avatar:"SP", color:"#e0784a",
-    bio:"Dermatologist experienced in acne, eczema, psoriasis, cosmetic procedures, and skin cancer screening." },
-  { id:4, name:"Dr. Vikram Nair", specialty:"neurology", tag:"Neurology", exp:"15 yrs", fee:900, rating:4.9, reviews:241, avail:"Today", online:true, avatar:"VN", color:"#6a5acd",
-    bio:"Neurologist with specialisation in epilepsy, migraines, stroke management, and movement disorders." },
-  { id:5, name:"Dr. Kavya Reddy", specialty:"pediatrics", tag:"Pediatrics", exp:"10 yrs", fee:450, rating:4.8, reviews:407, avail:"Today", online:true, avatar:"KR", color:"#2e9b6a",
-    bio:"Paediatrician focused on child development, vaccination schedules, neonatal care, and adolescent health." },
-  { id:6, name:"Dr. Rohit Sinha", specialty:"orthopedics", tag:"Orthopedics", exp:"11 yrs", fee:700, rating:4.6, reviews:163, avail:"Tomorrow", online:false, avatar:"RS", color:"#c07830",
-    bio:"Orthopedic surgeon specialising in joint replacement, sports injuries, spine disorders, and fracture care." },
-  { id:7, name:"Dr. Meena Iyer", specialty:"gynecology", tag:"Gynecology", exp:"14 yrs", fee:650, rating:4.9, reviews:294, avail:"Today", online:true, avatar:"MI", color:"#c0507a",
-    bio:"Obstetrician and gynaecologist with extensive experience in high-risk pregnancies, PCOS, and laparoscopic surgery." },
-  { id:8, name:"Dr. Suresh Kumar", specialty:"psychiatry", tag:"Psychiatry", exp:"9 yrs", fee:800, rating:4.7, reviews:132, avail:"Today", online:true, avatar:"SK", color:"#7a6aaa",
-    bio:"Psychiatrist specialising in anxiety, depression, OCD, ADHD, and trauma-informed psychotherapy." },
-  { id:9, name:"Dr. Ananya Ghosh", specialty:"ophthalmology", tag:"Eye Care", exp:"7 yrs", fee:550, rating:4.8, reviews:218, avail:"Tomorrow", online:false, avatar:"AG", color:"#3a8a7a",
-    bio:"Ophthalmologist offering comprehensive eye exams, cataract surgery, glaucoma treatment, and LASIK evaluation." },
-];
+const ALL_SPECIALTY = { id:"all", label:"All", icon:"🏥" };
 
 const TIME_SLOTS = {
   Today: ["09:00","09:30","10:00","10:30","11:00","11:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00"],
@@ -48,7 +14,8 @@ const DAYS = (() => {
   return Array.from({length:7}, (_,i) => {
     const d = new Date(today); d.setDate(today.getDate()+i);
     const key = i===0?"Today":i===1?"Tomorrow":"Other";
-    return { label:i===0?"Today":i===1?"Tomorrow":d.toLocaleDateString("en-IN",{weekday:"short"}), date:d.getDate(), month:d.toLocaleDateString("en-IN",{month:"short"}), slotKey:key };
+    const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    return { label:i===0?"Today":i===1?"Tomorrow":d.toLocaleDateString("en-IN",{weekday:"short"}), date:d.getDate(), month:d.toLocaleDateString("en-IN",{month:"short"}), iso, slotKey:key };
   });
 })();
 
@@ -186,10 +153,12 @@ function BookingSheet({doctor, onClose, onConfirm}) {
   const [selDay, setSelDay] = useState(0);
   const [selSlot, setSelSlot] = useState(null);
   const [type, setType] = useState("clinic");
-  const [name, setName] = useState("Kartikey");
+  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [reason, setReason] = useState("");
   const [done, setDone] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const slots = TIME_SLOTS[DAYS[selDay]?.slotKey] || TIME_SLOTS.Other;
   const I = { width:"100%",padding:"11px 14px",borderRadius:12,border:"1.5px solid #dde8cc",fontSize:14,color:"#1a2c12",background:"#fafaf5",fontFamily:"'Plus Jakarta Sans',sans-serif",boxSizing:"border-box",outline:"none",marginBottom:12 };
@@ -199,8 +168,8 @@ function BookingSheet({doctor, onClose, onConfirm}) {
     <div onClick={onClose} style={{ position:"fixed",inset:0,zIndex:999,background:"rgba(0,0,0,.46)",display:"flex",alignItems:"flex-end",justifyContent:"center" }}>
       <div onClick={e=>e.stopPropagation()} style={{ background:"#fff",borderRadius:"26px 26px 0 0",padding:"44px 28px 64px",width:"100%",maxWidth:480,textAlign:"center" }}>
         <div style={{ fontSize:66,marginBottom:16 }}>🎉</div>
-        <h2 style={{ fontWeight:800,fontSize:22,color:"#1a2c12",marginBottom:8 }}>Booked!</h2>
-        <p style={{ fontSize:14,color:"#7a8a6a",lineHeight:1.65,marginBottom:24 }}>Your appointment with <b style={{color:"#3e6830"}}>{doctor.name}</b> is confirmed for<br/><b style={{color:"#1a2c12"}}>{DAYS[selDay].label} at {selSlot}</b> · {type==="video"?"📹 Video":"🏥 Clinic"}</p>
+        <h2 style={{ fontWeight:800,fontSize:22,color:"#1a2c12",marginBottom:8 }}>Request submitted</h2>
+        <p style={{ fontSize:14,color:"#7a8a6a",lineHeight:1.65,marginBottom:24 }}>Your request for <b style={{color:"#3e6830"}}>{doctor.name}</b> was saved for<br/><b style={{color:"#1a2c12"}}>{DAYS[selDay].label} at {selSlot}</b> · {type==="video"?"📹 Video":"🏥 Clinic"}. The clinic must confirm it.</p>
         <button onClick={onClose} style={{ width:"100%",padding:"14px",borderRadius:14,border:"none",background:"#3e6830",color:"#fff",fontWeight:800,fontSize:16,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif" }}>Done</button>
       </div>
     </div>
@@ -213,7 +182,7 @@ function BookingSheet({doctor, onClose, onConfirm}) {
           <div style={{ width:40,height:4,borderRadius:2,background:"#ddd",margin:"0 auto 16px" }} />
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
             <div>
-              <div style={{ fontSize:11,color:"#bbb",fontWeight:700,letterSpacing:.7,textTransform:"uppercase",marginBottom:3 }}>{step===1?"Pick Date & Time":step===2?"Your Details":"Review & Pay"}</div>
+          <div style={{ fontSize:11,color:"#bbb",fontWeight:700,letterSpacing:.7,textTransform:"uppercase",marginBottom:3 }}>{step===1?"Pick Date & Time":step===2?"Your Details":"Review Request"}</div>
               <h2 style={{ fontWeight:800,fontSize:19,color:"#1a2c12" }}>{doctor.name}</h2>
             </div>
             <button onClick={onClose} style={{ background:"#f5f5f0",border:"none",borderRadius:10,width:36,height:36,cursor:"pointer",fontSize:14,color:"#888" }}>✕</button>
@@ -270,9 +239,10 @@ function BookingSheet({doctor, onClose, onConfirm}) {
               ))}
             </div>
             {reason && <div style={{ background:"#fffbec",border:"1px solid #f0e0a0",borderRadius:14,padding:"12px 16px",marginBottom:20,fontSize:13,color:"#7a6020",lineHeight:1.5 }}>📋 {reason}</div>}
+            {saveError && <div role="alert" style={{ background:"#fff0ef",border:"1px solid #f2c2be",borderRadius:12,padding:"10px 12px",marginBottom:12,fontSize:13,color:"#a52d26" }}>{saveError}</div>}
             <div style={{ display:"flex",gap:10 }}>
               <button onClick={()=>setStep(2)} style={{ flex:1,padding:"13px",borderRadius:14,border:"1.5px solid #d0d8c8",background:"#fafaf5",color:"#7a8a6a",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif" }}>← Edit</button>
-              <button onClick={()=>{setDone(true);onConfirm({doctor,day:DAYS[selDay],slot:selSlot,type});}} style={{ flex:2,padding:"13px",borderRadius:14,border:"none",fontWeight:800,fontSize:14,background:"linear-gradient(135deg,#3e6830,#5a8a40)",color:"#fff",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif" }}>✅ Confirm & Pay</button>
+              <button disabled={saving} onClick={async()=>{setSaving(true);setSaveError("");try{await onConfirm({doctor,day:DAYS[selDay],slot:selSlot,type,name,phone,reason});setDone(true);}catch(error){setSaveError(error.message||"Could not save your request.");}finally{setSaving(false);}}} style={{ flex:2,padding:"13px",borderRadius:14,border:"none",fontWeight:800,fontSize:14,background:"linear-gradient(135deg,#3e6830,#5a8a40)",color:"#fff",cursor:saving?"wait":"pointer",opacity:saving ? .7 : 1,fontFamily:"'Plus Jakarta Sans',sans-serif" }}>{saving?"Saving…":"✅ Send appointment request"}</button>
             </div>
           </>}
         </div>
@@ -285,13 +255,40 @@ export default function DoctorPage() {
   const [specialty, setSpecialty] = useState("all");
   const [search, setSearch] = useState("");
   const [bookDoc, setBookDoc] = useState(null);
-  const [callDoc, setCallDoc] = useState(null);
   const [appointments, setAppointments] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [specialties, setSpecialties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [directoryError, setDirectoryError] = useState("");
   const [toast, setToast] = useState(null);
-  const navigate = useNavigate();
 
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(null),3200); };
-  const filtered = DOCTORS.filter(d => (specialty==="all"||d.specialty===specialty) && (!search.trim()||d.name.toLowerCase().includes(search.toLowerCase())||d.tag.toLowerCase().includes(search.toLowerCase())));
+  useEffect(() => {
+    let active = true;
+    getDoctorDirectory().then(({ doctors: rows = [], specialties: categories = [], appointments: saved = [] }) => {
+      if (!active) return;
+      const mapped = rows.map((d) => ({
+        id:d.id, name:d.name, specialty:d.specialty_id, tag:d.specialty_label,
+        exp:`${d.experience_years} yrs`, fee:Number(d.fee), rating:Number(d.rating), reviews:d.review_count,
+        avail:d.availability_label, online:d.available_online, avatar:d.avatar_initials, color:d.avatar_color,
+        bio:d.bio, isSample:d.is_sample,
+      }));
+      setDoctors(mapped);
+      setSpecialties([ALL_SPECIALTY, ...categories.map((s) => ({ id:s.id, label:s.label, icon:s.icon }))]);
+      setAppointments(saved.filter((a) => a.date >= new Date().toISOString().slice(0,10)).map((a) => ({
+        id:a.id, doctor:mapped.find((d) => d.id === a.doctor_id) || { name:a.doctor_name },
+        day:{ label:a.date === new Date().toISOString().slice(0,10) ? "Today" : a.date },
+        slot:String(a.time).slice(0,5), type:a.consultation_type,
+      })));
+      setLoading(false);
+    }).catch((error) => {
+      if (!active) return;
+      setDirectoryError(error.message || "Could not load doctors from Supabase.");
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+  const filtered = doctors.filter(d => (specialty==="all"||d.specialty===specialty) && (!search.trim()||d.name.toLowerCase().includes(search.toLowerCase())||d.tag.toLowerCase().includes(search.toLowerCase())));
   const latestAppt = appointments[appointments.length-1];
 
   return (
@@ -303,7 +300,6 @@ export default function DoctorPage() {
         .dcard:hover{transform:translateY(-2px);box-shadow:0 6px 26px rgba(0,0,0,.11);}
       `}</style>
 
-      {callDoc && <VideoCallScreen doctor={callDoc} onEnd={()=>{setCallDoc(null);showToast("📹 Call ended");}} />}
 
       <div style={{ background: "#fbf9f2", minHeight: "100vh", paddingBottom: 110, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         {/* Search & Specialties Area */}
@@ -323,18 +319,18 @@ export default function DoctorPage() {
             <div style={{ background:"linear-gradient(120deg,#3a6028,#5a8840)",borderRadius:20,padding:"16px 20px",marginTop:18,display:"flex",gap:14,alignItems:"center" }}>
               <span style={{ fontSize:28 }}>📅</span>
               <div style={{ flex:1 }}>
-                <div style={{ color:"rgba(255,255,255,.6)",fontSize:11,fontWeight:700,textTransform:"uppercase",marginBottom:3 }}>Upcoming</div>
+                <div style={{ color:"rgba(255,255,255,.6)",fontSize:11,fontWeight:700,textTransform:"uppercase",marginBottom:3 }}>Appointment request</div>
                 <div style={{ color:"#fff",fontWeight:700,fontSize:14 }}>{latestAppt.doctor.name}</div>
                 <div style={{ color:"rgba(255,255,255,.65)",fontSize:12,marginTop:2 }}>{latestAppt.day.label} · {latestAppt.slot} · {latestAppt.type==="video"?"📹 Video":"🏥 Clinic"}</div>
               </div>
-              <span style={{ background:"rgba(255,255,255,.15)",borderRadius:8,padding:"5px 12px",color:"#fff",fontSize:12,fontWeight:700 }}>{appointments.length} booked</span>
+              <span style={{ background:"rgba(255,255,255,.15)",borderRadius:8,padding:"5px 12px",color:"#fff",fontSize:12,fontWeight:700 }}>{appointments.length} requests</span>
             </div>
           )}
 
           <div style={{ marginTop:20 }}>
             <div style={{ fontWeight:700,fontSize:11,color:"#9aaa8a",letterSpacing:.8,textTransform:"uppercase",marginBottom:12 }}>Specialties</div>
             <div style={{ display:"flex",gap:8,overflowX:"auto",paddingBottom:8 }}>
-              {SPECIALTIES.map(s=>(
+              {specialties.map(s=>(
                 <button key={s.id} onClick={()=>setSpecialty(s.id)} style={{ flexShrink:0,display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:22,cursor:"pointer",fontWeight:700,fontSize:12,border:`1.5px solid ${specialty===s.id?"#3e6830":"#d0e0c0"}`,background:specialty===s.id?"#3e6830":"#fff",color:specialty===s.id?"#fff":"#5a7a4a",fontFamily:"'Plus Jakarta Sans',sans-serif",boxShadow:specialty===s.id?"0 3px 12px rgba(62,104,48,.3)":"none" }}>
                   <span style={{ fontSize:15 }}>{s.icon}</span>{s.label}
                 </button>
@@ -344,7 +340,7 @@ export default function DoctorPage() {
 
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:20,marginBottom:14 }}>
             <div style={{ fontWeight:700,fontSize:12,color:"#9aaa8a",letterSpacing:.8,textTransform:"uppercase" }}>
-              {specialty==="all"?"All Doctors":SPECIALTIES.find(s=>s.id===specialty)?.label} <span style={{color:"#3e6830"}}>({filtered.length})</span>
+              {specialty==="all"?"All Doctors":specialties.find(s=>s.id===specialty)?.label} <span style={{color:"#3e6830"}}>({filtered.length})</span>
             </div>
             <div style={{ display:"flex",alignItems:"center",gap:5,background:"#e8f4dc",borderRadius:8,padding:"4px 10px" }}>
               <span style={{ width:7,height:7,borderRadius:"50%",background:"#5cdc6a",display:"inline-block" }} />
@@ -352,8 +348,11 @@ export default function DoctorPage() {
             </div>
           </div>
 
-          {filtered.length===0 && <div style={{ textAlign:"center",padding:"52px 0",color:"#bbb",fontSize:14 }}>No doctors found. Try a different specialty or search term.</div>}
-          {filtered.map((doc,idx)=><DoctorCard key={doc.id} doc={doc} idx={idx} onBook={d=>setBookDoc(d)} onCall={d=>setCallDoc(d)} />)}
+          {directoryError && <div role="alert" style={{ marginTop:20,padding:16,borderRadius:14,background:"#fff0ef",color:"#a52d26",fontSize:13 }}>{directoryError}</div>}
+          {loading && <div style={{ textAlign:"center",padding:"40px 0",color:"#7a8a6a",fontSize:14 }}>Loading doctor directory…</div>}
+          {!loading && !directoryError && <div style={{ margin:"4px 0 14px",padding:"11px 13px",borderRadius:12,background:"#fff8e8",color:"#77591e",fontSize:11,lineHeight:1.5 }}>Sample doctor profiles: names, ratings, fees, and availability are examples only. Appointment requests are saved for follow-up; the clinic must confirm them.</div>}
+          {!loading && !directoryError && filtered.length===0 && <div style={{ textAlign:"center",padding:"52px 0",color:"#bbb",fontSize:14 }}>No doctors found. Try a different specialty or search term.</div>}
+          {filtered.map((doc,idx)=><DoctorCard key={doc.id} doc={doc} idx={idx} onBook={d=>setBookDoc(d)} onCall={()=>showToast("Video consultation is not connected yet. Send an appointment request instead.")} />)}
         </div>
       </div>
 
@@ -362,31 +361,17 @@ export default function DoctorPage() {
           doctor={bookDoc} 
           onClose={()=>setBookDoc(null)} 
           onConfirm={async (appt)=>{
-            setAppointments(a=>[...a,appt]);
-            setBookDoc(null);
-            showToast(`✅ Booked with ${appt.doctor.name}`);
-            
-            // Sync to Supabase
-            try {
-              const user = auth.currentUser;
-              if (user) {
-                const { data: dbUser } = await supabase.from('users').select('id').eq('firebase_uid', user.uid).single();
-                if (dbUser) {
-                  await supabase.from('consultations').insert({
-                    user_id: dbUser.id,
-                    doctor_name: appt.doctor.name,
-                    specialty: appt.doctor.tag,
-                    appointment_date: appt.day.date + " " + appt.day.month,
-                    appointment_time: appt.slot,
-                    type: appt.type,
-                    status: 'booked',
-                    fee: appt.doctor.fee
-                  });
-                }
-              }
-            } catch (e) {
-              console.error("Failed to sync appointment:", e);
-            }
+            const { appointment } = await requestDoctorAppointment({
+              doctor_id: appt.doctor.id,
+              date: appt.day.iso,
+              time: appt.slot,
+              consultation_type: appt.type,
+              patient_name: appt.name,
+              patient_phone: appt.phone,
+              reason: appt.reason,
+            });
+            setAppointments((items)=>[...items, { ...appt, id:appointment.id }]);
+            showToast(`✅ Request sent for ${appt.doctor.name}`);
           }} 
         />
       )}
