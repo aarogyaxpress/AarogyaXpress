@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../firebase";
+import { getProfileData } from "../lib/profile";
 import { supabase } from "../lib/supabase";
 
 const STORAGE_KEY = "aarogya_reports";
@@ -239,11 +240,7 @@ export default function AnatomyProfile() {
         const unsub = auth.onAuthStateChanged(async (u) => {
             if (!u) return;
             try {
-                const { data } = await supabase
-                    .from("users")
-                    .select("id,name,age,weight,height,blood_group,gender,location,allergies,chronic_diseases,phone")
-                    .eq("firebase_uid", u.uid)
-                    .single();
+                const data = await getProfileData();
                 if (data) {
                     setProfile(data);
                     setDbUserId(data.id);
@@ -280,7 +277,7 @@ export default function AnatomyProfile() {
             if (!u) return;
             setReportsLoading(true);
             try {
-                const { data: dbUser } = await supabase.from('users').select('id').eq('firebase_uid', u.uid).single();
+                const dbUser = await getProfileData();
                 if (!dbUser) return;
                 
                 // Fetch shared family links

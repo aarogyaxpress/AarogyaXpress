@@ -21,6 +21,10 @@ export function getProfileStatus() {
   return profileRequest("GET");
 }
 
+export function getProfileData() {
+  return profileRequest("GET");
+}
+
 export function saveProfile(profile) {
   return profileRequest("POST", profile);
 }

@@ -15,6 +15,32 @@ function parseBody(req) {
   return req.body || {};
 }
 
+function profileDatabaseError(action, error) {
+  console.error(`[api/profile] ${action} failed`, {
+    code: error?.code || "unknown",
+    message: error?.message || "Unknown Supabase error",
+  });
+  if (error?.code === "42703" || error?.code === "42P01") {
+    return {
+      status: 503,
+      message: "The Supabase profile schema is incomplete. Apply supabase/migrations/20261008_profile_setup.sql in the Supabase SQL Editor.",
+    };
+  }
+  if (error?.code === "42P10") {
+    return {
+      status: 503,
+      message: "Supabase needs a unique constraint on users.firebase_uid. Apply the project schema migration.",
+    };
+  }
+  if (/fetch failed|networkerror|enotfound|econnrefused/i.test(error?.message || "")) {
+    return {
+      status: 503,
+      message: "Supabase is unreachable. Check that the project is active and the server key is valid, then retry.",
+    };
+  }
+  return { status: 502, message: "Could not save your profile. Check the Supabase server key and connection." };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (!["GET", "POST"].includes(req.method)) {
@@ -33,11 +59,14 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     const { data, error } = await supabase
       .from("users")
-      .select("profile_completed")
+      .select("id,name,email,phone,location,age,gender,blood_group,weight,height,allergies,chronic_diseases,emergency_name,emergency_contact,profile_completed")
       .eq("firebase_uid", firebaseUid)
       .maybeSingle();
-    if (error) return res.status(502).json({ error: "Could not load your profile. Check the Supabase profile migration." });
-    return res.status(200).json({ profile_completed: Boolean(data?.profile_completed) });
+    if (error) {
+      const failure = profileDatabaseError("profile read", error);
+      return res.status(failure.status).json({ error: failure.message });
+    }
+    return res.status(200).json({ ...data, profile_completed: Boolean(data?.profile_completed) });
   }
 
   let body;
@@ -58,7 +87,10 @@ export default async function handler(req, res) {
       }, { onConflict: "firebase_uid" })
       .select("profile_completed")
       .single();
-    if (error) return res.status(502).json({ error: "Could not create your profile. Check the Supabase connection." });
+    if (error) {
+      const failure = profileDatabaseError("profile creation", error);
+      return res.status(failure.status).json({ error: failure.message });
+    }
     return res.status(200).json({ profile_completed: Boolean(data?.profile_completed) });
   }
 
@@ -98,6 +130,9 @@ export default async function handler(req, res) {
   };
 
   const { error } = await supabase.from("users").upsert(payload, { onConflict: "firebase_uid" });
-  if (error) return res.status(502).json({ error: "Could not save your profile. Check the Supabase profile migration and server key." });
+  if (error) {
+    const failure = profileDatabaseError("profile save", error);
+    return res.status(failure.status).json({ error: failure.message });
+  }
   return res.status(200).json({ profile_completed: true });
 }
