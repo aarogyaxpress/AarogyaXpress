@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { auth } from "../firebase";
 import { extractPrescriptionText } from "../lib/prescriptionOcr";
 import { generateGeminiText } from "../lib/gemini";
+import { saveHealthReport } from "../lib/healthRecords";
 
 /* This is the medical document analyzer page */
 export const CONDITION_DOCTOR_MAP = {
@@ -304,7 +305,7 @@ function ScanningView({ progress, fileName }) {
   );
 }
 
-function ResultsView({ result, fileName, onReset, onAddMedicine }) {
+function ResultsView({ result, fileName, onReset, onAddMedicine, syncError }) {
   const [tab, setTab] = useState("summary");
   const doctors = mapConditionsToDoctors(result.diseases?.map(d => d.name) || []);
   const TABS = [
@@ -318,6 +319,7 @@ function ResultsView({ result, fileName, onReset, onAddMedicine }) {
 
   return (
     <div style={{ animation: "slideIn 0.25s ease both" }}>
+      {syncError && <div role="alert" style={{ margin: "14px 16px 0", background: "#fff5e5", border: "1px solid #f0d99c", color: "#744c12", borderRadius: 12, padding: "12px 14px", fontSize: 12, fontWeight: 700, lineHeight: 1.5 }}>Analysis is ready, but cloud sync failed: {syncError}</div>}
       {/* Result header card */}
       <div style={{ padding: "14px 16px 0" }}>
         <div style={{ background: "linear-gradient(135deg,#5a6e3a,#3e4e26)", borderRadius: 20, padding: "16px 18px", position: "relative", overflow: "hidden" }}>
@@ -545,6 +547,7 @@ export default function MedicalDocAnalyzer() {
   const [fileName, setFileName] = useState("");
   const [progress, setProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
+  const [syncError, setSyncError] = useState("");
   const fileInputRef = useRef();
 
   const handleAddMedicine = async (med) => {
@@ -607,6 +610,7 @@ export default function MedicalDocAnalyzer() {
   };
 
   const processFile = useCallback(async (file) => {
+    setSyncError("");
     const allowed = ["application/pdf", "image/jpeg", "image/png", "image/jpg", "image/webp"];
     if (!allowed.includes(file.type)) {
       setErrorMsg("Please upload a PDF, JPG, PNG or WebP file.");
@@ -647,34 +651,23 @@ export default function MedicalDocAnalyzer() {
       clearInterval(ticker);
       setProgress(100);
 
-      // Updated by Kartikey : Synced App with Supabase
+      // Persist through the authenticated server API so Supabase RLS does not
+      // silently discard writes made with the browser publishable key.
       (async () => {
         try {
           if (!auth.currentUser) return;
-          const { data: dbUser } = await supabase.from('users').select('id').eq('firebase_uid', auth.currentUser.uid).single();
-          if (!dbUser) return;
-
-          const { data: reportInsert, error: repError } = await supabase.from('reports').insert({
-            user_id: dbUser.id,
+          await saveHealthReport({
             file_name: file.name,
             patient_name: parsedData.patientName,
             report_date: parsedData.reportDate,
             summary: parsedData.summary,
             overall_status: parsedData.overallStatus,
             raw_json: parsedData
-          }).select('id').single();
-
-          if (repError || !reportInsert) return;
-          const reportId = reportInsert.id;
-
-          if (parsedData.vitals?.length > 0) supabase.from('vitals').insert(parsedData.vitals.map(v => ({ report_id: reportId, label: v.label, value: v.value, unit: v.unit, status: v.status }))).then();
-          if (parsedData.diseases?.length > 0) supabase.from('diseases').insert(parsedData.diseases.map(d => ({ report_id: reportId, name: d.name, severity: d.severity }))).then();
-          if (parsedData.medicines?.length > 0) supabase.from('report_medicines').insert(parsedData.medicines.map(m => ({ report_id: reportId, name: m.name, dosage: m.dosage, frequency: m.frequency }))).then();
-          if (parsedData.keyFindings?.length > 0) supabase.from('findings').insert(parsedData.keyFindings.map(f => ({ report_id: reportId, text: f }))).then();
-          if (parsedData.recommendations?.length > 0) supabase.from('recommendations').insert(parsedData.recommendations.map(r => ({ report_id: reportId, text: r }))).then();
-
+          });
+          setSyncError("");
         } catch (e) {
-          console.error("Supabase sync background task error:", e);
+          console.error("Supabase report sync failed:", e);
+          setSyncError(e.message || "Could not sync this report to Supabase.");
         }
       })();
 
@@ -784,7 +777,7 @@ export default function MedicalDocAnalyzer() {
           )}
 
           {state === "results" && result && (
-            <ResultsView result={result} fileName={fileName} onReset={reset} onAddMedicine={handleAddMedicine} />
+            <ResultsView result={result} fileName={fileName} onReset={reset} onAddMedicine={handleAddMedicine} syncError={syncError} />
           )}
 
         </div>

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../firebase";
 import { getProfileData } from "../lib/profile";
-import { supabase } from "../lib/supabase";
+import { deleteHealthReport, getHealthRecords } from "../lib/healthRecords";
 
 const STORAGE_KEY = "aarogya_reports";
 const RANGES = {
@@ -229,10 +229,12 @@ export default function AnatomyProfile() {
     const [activeTab, setActiveTab] = useState("overview");
     const [mood, setMood] = useState(null);
     const [profile, setProfile] = useState(null);
+    const [profileError, setProfileError] = useState("");
     const [reports, setReports] = useState([]); 
     const [consultations, setConsultations] = useState([]);
     const [activities, setActivities] = useState([]);
     const [reportsLoading, setReportsLoading] = useState(false);
+    const [recordsError, setRecordsError] = useState("");
     const [dbUserId, setDbUserId] = useState(null);
 
     // Load profile data from Supabase
@@ -244,8 +246,12 @@ export default function AnatomyProfile() {
                 if (data) {
                     setProfile(data);
                     setDbUserId(data.id);
+                    if (!data.id) setProfileError("Your profile has not synced to Supabase yet. Complete profile setup to save health details.");
+                    else setProfileError("");
                 }
-            } catch {}
+            } catch (error) {
+                setProfileError(error.message || "Could not load your profile from Supabase.");
+            }
         });
         return unsub;
     }, []);
@@ -258,7 +264,9 @@ export default function AnatomyProfile() {
                 if (data.length) {
                     const r = data[data.length - 1]; setReport(r); computeScore(r);
                 }
-            } catch (e) { }
+            } catch (error) {
+                console.warn("Could not read the cached health report:", error);
+            }
         }
         function computeScore(r) {
             const keys = Object.keys(RANGES).filter(k => r[k]);
@@ -280,20 +288,14 @@ export default function AnatomyProfile() {
                 const dbUser = await getProfileData();
                 if (!dbUser) return;
                 
-                // Fetch shared family links
-                const { data: links } = await supabase.from('family_links')
-                    .select('linked_user_id').eq('user_id', dbUser.id).eq('status', 'accepted');
-                const famIds = links ? links.map(l => l.linked_user_id) : [];
-                const ids = [dbUser.id, ...famIds];
-                
-                // Fetch Reports
-                const { data: reps } = await supabase
-                    .from('reports')
-                    .select('id,file_name,patient_name,report_date,summary,overall_status,created_at,raw_json,user_id')
-                    .in('user_id', ids)
-                    .order('created_at', { ascending: false })
-                    .limit(20);
-                setReports(reps || []);
+                if (!dbUser.id) {
+                    setRecordsError("Your profile is not synced to Supabase yet. Complete profile setup to load reports and history.");
+                    return;
+                }
+                const records = await getHealthRecords();
+                const reps = records.reports || [];
+                setRecordsError("");
+                setReports(reps);
                 
                 // If we have a latest report in Supabase, sync it to the anatomical view
                 if (reps && reps.length > 0) {
@@ -304,23 +306,12 @@ export default function AnatomyProfile() {
                     }
                 }
 
-                // Fetch Consultations
-                const { data: cons } = await supabase
-                    .from('consultations')
-                    .select('*')
-                    .in('user_id', ids)
-                    .order('created_at', { ascending: false });
-                setConsultations(cons || []);
-
-                // Fetch Activities
-                const { data: acts } = await supabase
-                    .from('activities')
-                    .select('id, type, title, description, cost, created_at, user_id')
-                    .in('user_id', ids)
-                    .order('created_at', { ascending: false });
-                setActivities(acts || []);
-
-            } catch (e) { console.error('Failed to fetch data:', e); }
+                setConsultations(records.consultations || []);
+                setActivities(records.activities || []);
+            } catch (e) {
+                console.error('Failed to fetch health records:', e);
+                setRecordsError(e.message || "Could not load your reports and history.");
+            }
             finally { setReportsLoading(false); }
         });
         function computeScore(r) {
@@ -335,9 +326,12 @@ export default function AnatomyProfile() {
     // Delete report from Supabase
     const deleteReport = async (repId) => {
         try {
-            await supabase.from('reports').delete().eq('id', repId);
+            await deleteHealthReport(repId);
             setReports(prev => prev.filter(r => r.id !== repId));
-        } catch (e) { console.error('Delete report failed:', e); }
+        } catch (e) {
+            console.error('Delete report failed:', e);
+            setRecordsError(e.message || "Could not delete this report.");
+        }
     };
 
     const displayReport = report || {};
@@ -413,6 +407,17 @@ export default function AnatomyProfile() {
                             <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ flex: 1, background: "none", border: "none", cursor: "pointer", padding: "10px 0 15px", fontSize: 14, fontWeight: activeTab === t.id ? 900 : 600, color: activeTab === t.id ? "#3e4e26" : "#8a9a7a", borderBottom: activeTab === t.id ? "3px solid #3e4e26" : "3px solid transparent", transition: "all 0.2s", marginBottom: -1.5 }}>{t.label}</button>
                         ))}
                     </div>
+
+                    {recordsError && (
+                        <div role="alert" style={{ margin: "14px 20px 0", padding: "12px 14px", borderRadius: 12, background: "#fff5e5", color: "#744c12", fontSize: 12, fontWeight: 700, lineHeight: 1.5 }}>
+                            Supabase sync issue: {recordsError}
+                        </div>
+                    )}
+                    {profileError && (
+                        <div role="alert" style={{ margin: "14px 20px 0", padding: "12px 14px", borderRadius: 12, background: "#fff5e5", color: "#744c12", fontSize: 12, fontWeight: 700, lineHeight: 1.5 }}>
+                            Profile sync issue: {profileError}
+                        </div>
+                    )}
 
                     {/* Overview tab */}
                     {activeTab === "overview" && (

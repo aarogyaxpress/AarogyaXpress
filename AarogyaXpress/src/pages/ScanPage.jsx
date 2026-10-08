@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase"
 import { auth } from "../firebase"
 import { extractPrescriptionText } from "../lib/prescriptionOcr"
 import { generateGeminiText } from "../lib/gemini"
+import { logHealthActivity } from "../lib/healthRecords"
 
 function frequencyToTime(freq) {
   if (!freq) return "2:00 PM";
@@ -150,6 +151,12 @@ const ScanPage = () => {
       // Supabase sync
       const user = auth.currentUser;
       if (user) {
+        await logHealthActivity({
+          type: "medicine",
+          title: "Medicine Added",
+          description: `Added ${scanData.name} to reminders (${scanData.dosage}).`,
+          status: "active"
+        });
         const { data: dbUser } = await supabase.from("users").select("id").eq("firebase_uid", user.uid).single();
         if (dbUser) {
           const { data: med } = await supabase.from("medicines").insert({
@@ -167,14 +174,6 @@ const ScanPage = () => {
               frequency: "daily",
               status: "active",
               target_tag: "Personal"
-            });
-            // Log activity for timeline
-            await supabase.from("activities").insert({
-              user_id: dbUser.id,
-              type: "medicine",
-              title: "Medicine Added",
-              description: `Added ${scanData.name} to reminders (${scanData.dosage}).`,
-              status: "active"
             });
           }
         }

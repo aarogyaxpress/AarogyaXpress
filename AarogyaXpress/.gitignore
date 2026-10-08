@@ -34,3 +34,4 @@ ml-service/**/__pycache__/
 .env.local
 .env.development
 .env.production
+.vercel

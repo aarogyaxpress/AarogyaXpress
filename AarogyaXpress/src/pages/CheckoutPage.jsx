@@ -1,7 +1,7 @@
 // src/pages/CheckoutPage.jsx  –  Flipkart/Amazon-style checkout with address + GST
 import { useState } from "react"
-import { supabase } from "../lib/supabase"
 import { auth } from "../firebase"
+import { logHealthActivity } from "../lib/healthRecords"
 
 export default function CheckoutPage({ cart, onClose, onSuccess }) {
   const GST_RATE  = 0.12
@@ -209,18 +209,13 @@ export default function CheckoutPage({ cart, onClose, onSuccess }) {
               try {
                 const user = auth.currentUser
                 if (user) {
-                  const { data: dbUser } = await supabase.from('users').select('id').eq('firebase_uid', user.uid).single()
-                  if (dbUser) {
-                    const rows = cart.map(item => ({
-                      user_id: dbUser.id,
+                  await Promise.all(cart.map(item => logHealthActivity({
                       type: 'medicine_purchase',
                       title: 'Medicine Purchased',
                       description: `${item.name} ${item.dosage} × ${item.qty} — ${payMethod.toUpperCase()}`,
                       cost: item.price * item.qty,
                       status: 'completed',
-                    }))
-                    await supabase.from('activities').insert(rows)
-                  }
+                    })))
                 }
               } catch (e) {
                 console.error('Failed to log purchase activity:', e)
