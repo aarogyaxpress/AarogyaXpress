@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const failure = specialties.error || doctors.error;
     if (failure) {
       console.error("[api/doctors] directory read failed", failure.code, failure.message);
-      return res.status(502).json({ error: "Could not load the doctor directory. Apply the doctor directory migration in Supabase." });
+      return res.status(502).json({ error: "Doctor directory tables are missing. Run supabase/migrations/20261008_doctor_directory.sql in the Supabase SQL Editor." });
     }
 
     const firebaseUid = await authenticatedUserId(req);

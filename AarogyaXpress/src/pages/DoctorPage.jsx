@@ -301,9 +301,9 @@ export default function DoctorPage() {
       `}</style>
 
 
-      <div style={{ background: "#fbf9f2", minHeight: "100vh", paddingBottom: 110, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <div style={{ background: "var(--cream)", minHeight: "100vh", paddingBottom: 110, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         {/* Search & Specialties Area */}
-        <div style={{ background: "linear-gradient(150deg,#253d1e,#3a6028,#4e7a3a)", padding: "20px 22px 30px", borderRadius: "0 0 32px 32px", position: "relative", overflow: "hidden" }}>
+        <div style={{ background: "linear-gradient(135deg,var(--olive-dark),var(--olive))", padding: "20px 22px 30px", borderRadius: "0 0 32px 32px", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: -50, right: -50, width: 170, height: 170, borderRadius: "50%", background: "rgba(255,255,255,.06)" }} />
           <div style={{ position: "relative", zIndex: 2 }}>
             <div style={{ color: "rgba(255,255,255,.7)", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>🔍 Search Specialists</div>
@@ -316,7 +316,7 @@ export default function DoctorPage() {
 
         <div style={{ padding:"0 18px" }}>
           {latestAppt && (
-            <div style={{ background:"linear-gradient(120deg,#3a6028,#5a8840)",borderRadius:20,padding:"16px 20px",marginTop:18,display:"flex",gap:14,alignItems:"center" }}>
+            <div style={{ background:"linear-gradient(135deg,var(--olive-dark),var(--olive))",borderRadius:20,padding:"16px 20px",marginTop:18,display:"flex",gap:14,alignItems:"center" }}>
               <span style={{ fontSize:28 }}>📅</span>
               <div style={{ flex:1 }}>
                 <div style={{ color:"rgba(255,255,255,.6)",fontSize:11,fontWeight:700,textTransform:"uppercase",marginBottom:3 }}>Appointment request</div>
@@ -331,7 +331,7 @@ export default function DoctorPage() {
             <div style={{ fontWeight:700,fontSize:11,color:"#9aaa8a",letterSpacing:.8,textTransform:"uppercase",marginBottom:12 }}>Specialties</div>
             <div style={{ display:"flex",gap:8,overflowX:"auto",paddingBottom:8 }}>
               {specialties.map(s=>(
-                <button key={s.id} onClick={()=>setSpecialty(s.id)} style={{ flexShrink:0,display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:22,cursor:"pointer",fontWeight:700,fontSize:12,border:`1.5px solid ${specialty===s.id?"#3e6830":"#d0e0c0"}`,background:specialty===s.id?"#3e6830":"#fff",color:specialty===s.id?"#fff":"#5a7a4a",fontFamily:"'Plus Jakarta Sans',sans-serif",boxShadow:specialty===s.id?"0 3px 12px rgba(62,104,48,.3)":"none" }}>
+                <button key={s.id} onClick={()=>setSpecialty(s.id)} style={{ flexShrink:0,display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:22,cursor:"pointer",fontWeight:700,fontSize:12,border:`1.5px solid ${specialty===s.id?"var(--olive-dark)":"#d0e0c0"}`,background:specialty===s.id?"var(--olive-dark)":"#fff",color:specialty===s.id?"#fff":"#5a7a4a",fontFamily:"'Plus Jakarta Sans',sans-serif",boxShadow:specialty===s.id?"0 3px 12px rgba(62,78,38,.22)":"none" }}>
                   <span style={{ fontSize:15 }}>{s.icon}</span>{s.label}
                 </button>
               ))}
@@ -348,7 +348,7 @@ export default function DoctorPage() {
             </div>
           </div>
 
-          {directoryError && <div role="alert" style={{ marginTop:20,padding:16,borderRadius:14,background:"#fff0ef",color:"#a52d26",fontSize:13 }}>{directoryError}</div>}
+          {directoryError && <div role="alert" style={{ marginTop:20,padding:16,borderRadius:14,border:"1px solid #f2e0bb",background:"#fff8e8",color:"#77591e",fontSize:13,lineHeight:1.55 }}>⚠️ {directoryError}</div>}
           {loading && <div style={{ textAlign:"center",padding:"40px 0",color:"#7a8a6a",fontSize:14 }}>Loading doctor directory…</div>}
           {!loading && !directoryError && <div style={{ margin:"4px 0 14px",padding:"11px 13px",borderRadius:12,background:"#fff8e8",color:"#77591e",fontSize:11,lineHeight:1.5 }}>Sample doctor profiles: names, ratings, fees, and availability are examples only. Appointment requests are saved for follow-up; the clinic must confirm them.</div>}
           {!loading && !directoryError && filtered.length===0 && <div style={{ textAlign:"center",padding:"52px 0",color:"#bbb",fontSize:14 }}>No doctors found. Try a different specialty or search term.</div>}
